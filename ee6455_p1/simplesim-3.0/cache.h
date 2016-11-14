@@ -132,6 +132,11 @@ struct cache_blk_t
 		defined in this structure! */
 	byte_t data[1];		/* actual data block starts here, block size
 						should probably be a multiple of 8 */
+<<<<<<< HEAD
+
+	unsigned char nru_bit; /* For NRU replacement */
+=======
+>>>>>>> origin/master
 };
 
 /* cache set definition (one or more blocks sharing the same set index) */
@@ -212,6 +217,10 @@ struct cache_t
 	 defined in this structure! */
 	struct cache_set_t sets[1];	/* each entry is a set */
 };
+
+/* For NRU replacement policy, find first nru block. HW test */
+struct cache_blk_t *
+first_nru_blk(struct cache_set_t *set);
 
 /* create and initialize a general cache structure */
 struct cache_t *			/* pointer to cache created */
