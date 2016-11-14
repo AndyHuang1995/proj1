@@ -158,12 +158,6 @@ unlink_htab_ent(struct cache_t *cp,		/* cache to update */
 	else{
 		/* middle or end of hash bucket list */
 		prev->hash_next = ent->hash_next;
-			/* head of hash bucket list */
-			set->hash[index] = ent->hash_next;
-	}
-	else{
-			/* middle or end of hash bucket list */
-			prev->hash_next = ent->hash_next;
 	}
 	ent->hash_next = NULL;
 }
@@ -197,10 +191,6 @@ update_way_list(struct cache_set_t *set,	/* set contained way chain */
 		assert(set->way_head == blk && set->way_tail == blk);
 		/* Head/Tail order already */
 		return;
-			/* only one entry in list (direct-mapped), no action */
-			assert(set->way_head == blk && set->way_tail == blk);
-			/* Head/Tail order already */
-			return;
 	}
 	/* else, more than one element in the list */
 	else if (!blk->way_prev){
@@ -253,58 +243,23 @@ update_way_list(struct cache_set_t *set,	/* set contained way chain */
 struct cache_blk_t *
 first_nru_blk(struct cache_set_t *set)
 {
-	cache_blk_t *blk;
+	struct cache_blk_t *blk;
 
 	/* search for first nru_bit = 1 */
-	for(blk=sets.way_head; blk; blk=blk->way_next){
+	for(blk=set->way_head; blk; blk=blk->way_next){
 		if(blk->nru_bit == 1){		/* if found, return */
 			blk->nru_bit = 0;
 			return blk;
 		}
 	}
 	/* if not found, set all blk's nru_bit to 1 */
-	for(blk=sets.way_head; blk; blk=blk->way_next)
+	for(blk=set->way_head; blk; blk=blk->way_next)
 		blk->nru_bit = 1;
 
-	blk = sets.way_head;
+	blk = set->way_head;
 	blk->nru_bit = 0;
 
 	return blk;
-	}
-	else if (!blk->way_next){
-		/* end of list (and not front of list) */
-		assert(set->way_head != blk && set->way_tail == blk);
-		if (where == Tail){
-			/* already there */
-			return;
-		}
-		set->way_tail = blk->way_prev;
-		blk->way_prev->way_next = NULL;
-	}
-	else{
-		/* middle of list (and not front or end of list) */
-		assert(set->way_head != blk && set->way_tail != blk);
-		blk->way_prev->way_next = blk->way_next;
-		blk->way_next->way_prev = blk->way_prev;
-	}
-
-	/* link BLK back into the list */
-	if (where == Head){
-		/* link to the head of the way list */
-		blk->way_next = set->way_head;
-		blk->way_prev = NULL;
-		set->way_head->way_prev = blk;
-		set->way_head = blk;
-	}
-	else if (where == Tail){
-		/* link to the tail of the way list */
-		blk->way_prev = set->way_tail;
-		blk->way_next = NULL;
-		set->way_tail->way_next = blk;
-		set->way_tail = blk;
-	}
-	else
-		panic("bogus WHERE designator");
 }
 
 /* create and initialize a general cache structure */
@@ -615,9 +570,11 @@ cache_access(struct cache_t *cp,	/* cache to access */
 			update_way_list(&cp->sets[set], repl, Head);
 			break;
 		case Random:
+		{
 			int bindex = myrand() & (cp->assoc - 1);
 			repl = CACHE_BINDEX(cp, cp->sets[set].blks, bindex);
 			break;
+		}
 		case NRU:
 			repl = first_nru_blk(&cp->sets[set]);
 			break;
@@ -628,46 +585,7 @@ cache_access(struct cache_t *cp,	/* cache to access */
 			panic("bogus replacement policy");
 
 	}
-		
-	if (cp->hsize){
-		/* higly-associativity cache, access through the per-set hash tables */
-		int hindex = CACHE_HASH(cp, tag);
 
-		for (blk=cp->sets[set].hash[hindex]; blk; blk=blk->hash_next){
-			if (blk->tag == tag && (blk->status & CACHE_BLK_VALID))
-				goto cache_hit;
-		}
-	}
-	else{
-		/* low-associativity cache, linear search the way list */
-		for (blk=cp->sets[set].way_head; blk; blk=blk->way_next){
-			if (blk->tag == tag && (blk->status & CACHE_BLK_VALID))
-				goto cache_hit;
-		}
-	}
-
-	/* cache block not found */
-
-	/* **MISS** */
-	cp->misses++;
-
-	/* select the appropriate block to replace, and re-link this entry to
-		the appropriate place in the way list */
-	switch (cp->policy){
-		case LRU:
-		case FIFO:
-			repl = cp->sets[set].way_tail;
-			update_way_list(&cp->sets[set], repl, Head);
-			break;
-		case Random:
-			int bindex = myrand() & (cp->assoc - 1);
-			repl = CACHE_BINDEX(cp, cp->sets[set].blks, bindex);
-			break;
-		default:
-			panic("bogus replacement policy");
-	}
-
->>>>>>> origin/master
 	/* remove this block from the hash bucket chain, if hash exists */
 	if (cp->hsize)
 		unlink_htab_ent(cp, &cp->sets[set], repl);
@@ -709,7 +627,6 @@ cache_access(struct cache_t *cp,	/* cache to access */
 	/* copy data out of cache block */
 	if (cp->balloc){
 		CACHE_BCOPY(cmd, repl, bofs, p, nbytes);
-		CACHE_BCOPY(cmd, repl, bofs, p, nbytes);
 	}
 
 	/* update dirty status */
@@ -739,7 +656,6 @@ cache_hit: /* slow hit handler */
 	/* copy data out of cache block, if block exists */
 	if (cp->balloc){
 		CACHE_BCOPY(cmd, blk, bofs, p, nbytes);
-		CACHE_BCOPY(cmd, blk, bofs, p, nbytes);
 	}
 
 	/* update dirty status */
@@ -755,29 +671,6 @@ cache_hit: /* slow hit handler */
 	/* if NRU replacement, HW test */
 	if (cp->policy == NRU)
 		blk->nru_bit = 0;
-
-	/* tag is unchanged, so hash links (if they exist) are still valid */
-
-	/* record the last block to hit */
-	cp->last_tagset = CACHE_TAGSET(cp, addr);
-	cp->last_blk = blk;
-
-	/* get user block data, if requested and it exists */
-	if (udata)
-		*udata = blk->user_data;
-
-	/* return first cycle data is available to access */
-	return (int) MAX(cp->hit_latency, (blk->ready - now));
-
-cache_fast_hit: /* fast hit handler */
-	
-	/* **FAST HIT** */
-	cp->hits++;
-
-	/* copy data out of cache block, if block exists */
-	if (cp->balloc){
-		CACHE_BCOPY(cmd, blk, bofs, p, nbytes);
-	}
 
 	/* tag is unchanged, so hash links (if they exist) are still valid */
 
