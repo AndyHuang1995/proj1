@@ -152,21 +152,18 @@ unlink_htab_ent(struct cache_t *cp,		/* cache to update */
 
 	/* unlink the block from the hash table bucket chain */
 	if (!prev){
-<<<<<<< HEAD
 		/* head of hash bucket list */
 		set->hash[index] = ent->hash_next;
 	}
 	else{
 		/* middle or end of hash bucket list */
 		prev->hash_next = ent->hash_next;
-=======
 			/* head of hash bucket list */
 			set->hash[index] = ent->hash_next;
 	}
 	else{
 			/* middle or end of hash bucket list */
 			prev->hash_next = ent->hash_next;
->>>>>>> origin/master
 	}
 	ent->hash_next = NULL;
 }
@@ -196,17 +193,14 @@ update_way_list(struct cache_set_t *set,	/* set contained way chain */
 	/* unlink entry from the way list */
 	if (!blk->way_prev && !blk->way_next){
 
-<<<<<<< HEAD
 		/* only one entry in list (direct-mapped), no action */
 		assert(set->way_head == blk && set->way_tail == blk);
 		/* Head/Tail order already */
 		return;
-=======
 			/* only one entry in list (direct-mapped), no action */
 			assert(set->way_head == blk && set->way_tail == blk);
 			/* Head/Tail order already */
 			return;
->>>>>>> origin/master
 	}
 	/* else, more than one element in the list */
 	else if (!blk->way_prev){
@@ -218,7 +212,6 @@ update_way_list(struct cache_set_t *set,	/* set contained way chain */
 		/* else, move to tail */
 		set->way_head = blk->way_next;
 		blk->way_next->way_prev = NULL;
-<<<<<<< HEAD
 	}
 	else if (!blk->way_next){
 		/* end of list (and not front of list) */
@@ -277,7 +270,6 @@ first_nru_blk(struct cache_set_t *set)
 	blk->nru_bit = 0;
 
 	return blk;
-=======
 	}
 	else if (!blk->way_next){
 		/* end of list (and not front of list) */
@@ -313,7 +305,6 @@ first_nru_blk(struct cache_set_t *set)
 	}
 	else
 		panic("bogus WHERE designator");
->>>>>>> origin/master
 }
 
 /* create and initialize a general cache structure */
@@ -434,10 +425,7 @@ cache_create(char *name,		/* name of the cache */
 			blk->tag = 0;
 			blk->ready = 0;
 			blk->user_data = (usize != 0 ? (byte_t *)calloc(usize, sizeof(byte_t)) : NULL);
-<<<<<<< HEAD
 			blk->nru_bit = 1;		/* HW test, 1 means victim */
-=======
->>>>>>> origin/master
 
 			/* insert cache block into set hash table */
 			if (cp->hsize)
@@ -484,13 +472,10 @@ cache_config(struct cache_t *cp,	/* cache instance */
 		cp->policy == LRU ? "LRU"
 		: cp->policy == Random ? "Random"
 		: cp->policy == FIFO ? "FIFO"
-<<<<<<< HEAD
 		: cp->policy == FIFO ? "NRU"
 		: cp->policy == FIFO ? "DRRIP"
-=======
-			: cp->policy == FIFO ? "NRU"
-			: cp->policy == FIFO ? "DRRIP"
->>>>>>> origin/master
+		: cp->policy == FIFO ? "NRU"
+		: cp->policy == FIFO ? "DRRIP"
 		: (abort(), ""));
 }
 
@@ -597,7 +582,6 @@ cache_access(struct cache_t *cp,	/* cache to access */
 			/* hit in the same block */
 			blk = cp->last_blk;
 			goto cache_fast_hit;
-<<<<<<< HEAD
 	}
 		
 	if (cp->hsize){
@@ -642,9 +626,7 @@ cache_access(struct cache_t *cp,	/* cache to access */
 			break;
 		default:
 			panic("bogus replacement policy");
-	}
 
-=======
 	}
 		
 	if (cp->hsize){
@@ -726,11 +708,8 @@ cache_access(struct cache_t *cp,	/* cache to access */
 
 	/* copy data out of cache block */
 	if (cp->balloc){
-<<<<<<< HEAD
 		CACHE_BCOPY(cmd, repl, bofs, p, nbytes);
-=======
-			CACHE_BCOPY(cmd, repl, bofs, p, nbytes);
->>>>>>> origin/master
+		CACHE_BCOPY(cmd, repl, bofs, p, nbytes);
 	}
 
 	/* update dirty status */
@@ -759,11 +738,8 @@ cache_hit: /* slow hit handler */
 
 	/* copy data out of cache block, if block exists */
 	if (cp->balloc){
-<<<<<<< HEAD
 		CACHE_BCOPY(cmd, blk, bofs, p, nbytes);
-=======
-			CACHE_BCOPY(cmd, blk, bofs, p, nbytes);
->>>>>>> origin/master
+		CACHE_BCOPY(cmd, blk, bofs, p, nbytes);
 	}
 
 	/* update dirty status */
@@ -776,7 +752,6 @@ cache_hit: /* slow hit handler */
 		update_way_list(&cp->sets[set], blk, Head);
 	}
 
-<<<<<<< HEAD
 	/* if NRU replacement, HW test */
 	if (cp->policy == NRU)
 		blk->nru_bit = 0;
@@ -804,7 +779,6 @@ cache_fast_hit: /* fast hit handler */
 		CACHE_BCOPY(cmd, blk, bofs, p, nbytes);
 	}
 
-=======
 	/* tag is unchanged, so hash links (if they exist) are still valid */
 
 	/* record the last block to hit */
@@ -828,7 +802,6 @@ cache_fast_hit: /* fast hit handler */
 		CACHE_BCOPY(cmd, blk, bofs, p, nbytes);
 	}
 
->>>>>>> origin/master
 	/* update dirty status */
 	if (cmd == Write)
 		blk->status |= CACHE_BLK_DIRTY;
