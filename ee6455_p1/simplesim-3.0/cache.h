@@ -134,6 +134,9 @@ struct cache_blk_t
 						should probably be a multiple of 8 */
 
 	unsigned char nru_bit; /* For NRU replacement */
+	unsigned char RRPV; /* For DRRIP replacement */
+	unsigned char BIRCTR; /* For DRRIP replacement */
+	
 };
 
 /* cache set definition (one or more blocks sharing the same set index) */
@@ -213,11 +216,20 @@ struct cache_t
 	/* NOTE: this is a variable-size tail array, this must be the LAST field
 	 defined in this structure! */
 	struct cache_set_t sets[1];	/* each entry is a set */
+
+	short PSEL; /* For DRRIP replacement */
 };
 
 /* For NRU replacement policy, find first nru block. HW test */
 struct cache_blk_t *
 first_nru_blk(struct cache_set_t *set);
+
+/* For DRRIP replacement policy */
+struct cache_blk_t *
+SRRIP_replacement(struct cache_set_t *set);
+
+struct cache_blk_t *
+BRRIP_replacement(struct cache_set_t *set);
 
 /* create and initialize a general cache structure */
 struct cache_t *			/* pointer to cache created */

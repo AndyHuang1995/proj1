@@ -58,6 +58,7 @@
 #include "machine.h"
 #include "cache.h"
 
+#define M 3 		/* HW test */
 /* cache access macros */
 #define CACHE_TAG(cp, addr)	((addr) >> (cp)->tag_shift)
 #define CACHE_SET(cp, addr)	(((addr) >> (cp)->set_shift) & (cp)->set_mask)
@@ -262,6 +263,31 @@ first_nru_blk(struct cache_set_t *set)
 	return blk;
 }
 
+struct cache_blk_t *
+SRRIP_replacement(struct cache_set_t *set)
+{
+	struct cache_blk_t *blk;
+
+	while(1){
+		/* search for first block's RRPV = 2^M-1 */
+		for(blk=set->way_head; blk; blk=blk->way_next){
+			if(blk->RRPV == (1 << M)-1){		/* if found, return */
+				blk->RRPV = (1 << M)-2;
+				return blk;
+			}
+		}
+		/* if not found, increase all blk's RRPV by 1 */
+		for(blk=set->way_head; blk; blk=blk->way_next)
+			blk->RRPV += 1;
+	}
+}
+
+struct cache_blk_t *
+BRRIP_replacement(struct cache_set_t *set)
+{
+	
+}
+
 /* create and initialize a general cache structure */
 struct cache_t *			/* pointer to cache created */
 cache_create(char *name,		/* name of the cache */
@@ -381,6 +407,7 @@ cache_create(char *name,		/* name of the cache */
 			blk->ready = 0;
 			blk->user_data = (usize != 0 ? (byte_t *)calloc(usize, sizeof(byte_t)) : NULL);
 			blk->nru_bit = 1;		/* HW test, 1 means victim */
+			blk->RRPV = (1 << M) - 1;		/* RRPV = 2^M - 1 */
 
 			/* insert cache block into set hash table */
 			if (cp->hsize)
@@ -396,6 +423,7 @@ cache_create(char *name,		/* name of the cache */
 				cp->sets[i].way_tail = blk;
 		}
 	}
+	cp->PSEL = 0;
 	return cp;
 }
 
@@ -579,7 +607,20 @@ cache_access(struct cache_t *cp,	/* cache to access */
 			repl = first_nru_blk(&cp->sets[set]);
 			break;
 		case DRRIP:
-
+			if (set % (cp->nsets/32) == 0){					/* SRRIP set */
+				repl = SRRIP_replacement(&cp->sets[set]);
+				cp->PSEL += 1;
+			}
+			else if ((set-1) % (cp->nsets/32) == 0){		/* BRRIP set */
+				repl = BRRIP_replacement(&cp->sets[set]);
+				cp->PSEL -= 1;
+			}
+			else{											/* follower set */
+				if(cp->PSEL >= 0)
+					repl = SRRIP_replacement(&cp->sets[set]);
+				else
+					repl = BRRIP_replacement(&cp->sets[set]);
+			}
 			break;
 		default:
 			panic("bogus replacement policy");
@@ -671,6 +712,9 @@ cache_hit: /* slow hit handler */
 	/* if NRU replacement, HW test */
 	if (cp->policy == NRU)
 		blk->nru_bit = 0;
+	else if (cp->policy == DRRIP && )
+		blk->RRPV = 0;
+
 
 	/* tag is unchanged, so hash links (if they exist) are still valid */
 
