@@ -187,7 +187,6 @@ update_way_list(struct cache_set_t *set,	/* set contained way chain */
 {
 	/* unlink entry from the way list */
 	if (!blk->way_prev && !blk->way_next){
-
 		/* only one entry in list (direct-mapped), no action */
 		assert(set->way_head == blk && set->way_tail == blk);
 		/* Head/Tail order already */
@@ -269,34 +268,40 @@ SRRIP_replacement(struct cache_set_t *set)
 	struct cache_blk_t *blk;
 
 	while(1){
-		/* search for first block's RRPV = 2^M-1, here M = 3 */
+		// search for first block's RRPV = 2^M-1, here M = 3 //
 		for(blk=set->way_head; blk; blk=blk->way_next){
-			if(blk->RRPV == (1 << RRPV_M)-1){		/* if found, return */
+			if(blk->RRPV == (1 << RRPV_M)-1){		// if found, return //
 				blk->RRPV = (1 << RRPV_M)-2;
 				return blk;
 			}
 		}
-		/* if not found, increase all blk's RRPV by 1 */
+		// if not found, increase all blk's RRPV by 1 //
 		for(blk=set->way_head; blk; blk=blk->way_next)
 			blk->RRPV += 1;
 	}
 }
 
 struct cache_blk_t *
-BRRIP_replacement(struct cache_set_t *set, unsigned char BIPCTR)
+BRRIP_replacement(struct cache_set_t *set, unsigned char *BIPCTR)
 {
 	struct cache_blk_t *blk;
 
 	while(1){
-		/* search for first block's RRPV = 2^M-1, here M = 3 */
+		// search for first block's RRPV = 2^M-1, here M = 3 //
 		for(blk=set->way_head; blk; blk=blk->way_next){
-			if(blk->RRPV == (1 << RRPV_M)-1){		/* if found, return */
-				if(BIPCTR == 0)
-					blk->RRPV -= 1;
+			if(blk->RRPV == (1 << RRPV_M)-1){		// if found, return //
+				if(*BIPCTR == 0)
+					blk->RRPV = (1 << RRPV_M)-2;
+
+				if(*BIPCTR < 31)
+					*BIPCTR += 1;
+				else
+					*BIPCTR = 0;
+
 				return blk;
 			}
 		}
-		/* if not found, increase all blk's RRPV by 1 */
+		// if not found, increase all blk's RRPV by 1 //
 		for(blk=set->way_head; blk; blk=blk->way_next)
 			blk->RRPV += 1;
 	}
@@ -346,6 +351,7 @@ cache_create(char *name,		/* name of the cache */
 	if (!cp)
 		fatal("out of virtual memory");
 
+	//printf("Initialize user parameters\n");
 	/* initialize user parameters */
 	cp->name = mystrdup(name);
 	cp->nsets = nsets;
@@ -384,6 +390,9 @@ cache_create(char *name,		/* name of the cache */
 	cp->writebacks = 0;
 	cp->invalidations = 0;
 
+	cp->BIPCTR = 0;
+	cp->PSEL = 0;
+
 	/* blow away the last block accessed */
 	cp->last_tagset = 0;
 	cp->last_blk = NULL;
@@ -405,14 +414,15 @@ cache_create(char *name,		/* name of the cache */
 		}
 
 		/* for DRRIP replacement, HW test */
-		if (i % (cp->nsets/32) == 0)				/* SRRIP set */
-			cp->sets[i].dedicated_type = SRRIP_set;
-		else if ((i-1) % (cp->nsets/32) == 0)		/* BRRIP set */
-			cp->sets[i].dedicated_type = BRRIP_set;
-		else										/* follower set */
-			cp->sets[i].dedicated_type = follower_set;
-		cp->BIPCTR = 0;
-		cp->PSEL = 0;
+		if(cp->policy == DRRIP){
+			if (i % (cp->nsets/32) == 0)				// SRRIP set 
+				cp->sets[i].dedicated_type = SRRIP_set;
+			else if ((i-1) % (cp->nsets/32) == 0)		// BRRIP set 
+				cp->sets[i].dedicated_type = BRRIP_set;
+			else										// follower set 
+				cp->sets[i].dedicated_type = follower_set;
+		}
+		
 
 		/* NOTE: all the blocks in a set *must* be allocated contiguously,
 	 	otherwise, block accesses through SET->BLKS will fail (used
@@ -449,7 +459,7 @@ cache_create(char *name,		/* name of the cache */
 				cp->sets[i].way_tail = blk;
 		}
 	}
-	
+	//printf("Create finish\n");
 	return cp;
 }
 
@@ -481,10 +491,8 @@ cache_config(struct cache_t *cp,	/* cache instance */
 		cp->policy == LRU ? "LRU"
 		: cp->policy == Random ? "Random"
 		: cp->policy == FIFO ? "FIFO"
-		: cp->policy == FIFO ? "NRU"
-		: cp->policy == FIFO ? "DRRIP"
-		: cp->policy == FIFO ? "NRU"
-		: cp->policy == FIFO ? "DRRIP"
+		: cp->policy == NRU ? "NRU"
+		: cp->policy == DRRIP ? "DRRIP"
 		: (abort(), ""));
 }
 
@@ -633,35 +641,25 @@ cache_access(struct cache_t *cp,	/* cache to access */
 			repl = first_nru_blk(&cp->sets[set]);
 			break;
 		case DRRIP:
-			if (cp->sets[set].dedicated_type == SRRIP_set){			/* SRRIP set */
+			if (cp->sets[set].dedicated_type == SRRIP_set){			// SRRIP set 
 				repl = SRRIP_replacement(&cp->sets[set]);
-				if(cp->PSEL < 31)								/* prevent overflow */
-					cp->PSEL++;
+				if(cp->PSEL < 31)								//prevent overflow 
+					cp->PSEL += 1;
 				else
 					cp->PSEL = 31;
 			}
-			else if (cp->sets[set].dedicated_type == BRRIP_set){	/* BRRIP set */
-				repl = BRRIP_replacement(&cp->sets[set], cp->BIPCTR);
-				if(cp->PSEL > -32)								/* prevent overflow */
-					cp->PSEL--;
+			else if (cp->sets[set].dedicated_type == BRRIP_set){	// BRRIP set 
+				repl = BRRIP_replacement(&cp->sets[set], &cp->BIPCTR);
+				if(cp->PSEL > -32)								// prevent overflow 
+					cp->PSEL -= 1;
 				else
 					cp->PSEL = -32;
-
-				if(cp->BIPCTR < 31)
-					cp->BIPCTR++;
-				else
-					cp->BIPCTR = 0;
 			}
-			else{												/* follower set */
+			else{												// follower set 
 				if(cp->PSEL >= 0)
 					repl = SRRIP_replacement(&cp->sets[set]);
-				else{
-					repl = BRRIP_replacement(&cp->sets[set], cp->BIPCTR);
-					if(cp->BIPCTR < 31)
-						cp->BIPCTR++;
-					else
-						cp->BIPCTR = 0;
-				}
+				else
+					repl = BRRIP_replacement(&cp->sets[set], &cp->BIPCTR);
 			}
 
 			break;

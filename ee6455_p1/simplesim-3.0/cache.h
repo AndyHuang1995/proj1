@@ -220,12 +220,12 @@ struct cache_t
 	/* data blocks */
 	byte_t *data;			/* pointer to data blocks allocation */
 
+ 	short PSEL; /* For DRRIP replacement */
+	unsigned char BIPCTR; /* For DRRIP replacement */
+
 	/* NOTE: this is a variable-size tail array, this must be the LAST field
 	 defined in this structure! */
 	struct cache_set_t sets[1];	/* each entry is a set */
-
-	short PSEL; /* For DRRIP replacement */
-	unsigned char BIPCTR; /* For DRRIP replacement */
 };
 
 /* For NRU replacement policy, find first nru block. HW test */
@@ -237,7 +237,7 @@ struct cache_blk_t *
 SRRIP_replacement(struct cache_set_t *set);
 
 struct cache_blk_t *
-BRRIP_replacement(struct cache_set_t *set, unsigned char BIPCTR);
+BRRIP_replacement(struct cache_set_t *set, unsigned char *BIPCTR);
 
 /* create and initialize a general cache structure */
 struct cache_t *			/* pointer to cache created */
