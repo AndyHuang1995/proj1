@@ -58,7 +58,7 @@
 #include "machine.h"
 #include "cache.h"
 
-#define M 3 		/* HW test */
+#define RRPV_M 3 			/* HW test */
 /* cache access macros */
 #define CACHE_TAG(cp, addr)	((addr) >> (cp)->tag_shift)
 #define CACHE_SET(cp, addr)	(((addr) >> (cp)->set_shift) & (cp)->set_mask)
@@ -269,10 +269,10 @@ SRRIP_replacement(struct cache_set_t *set)
 	struct cache_blk_t *blk;
 
 	while(1){
-		/* search for first block's RRPV = 2^M-1 */
+		/* search for first block's RRPV = 2^M-1, here M = 3 */
 		for(blk=set->way_head; blk; blk=blk->way_next){
-			if(blk->RRPV == (1 << M)-1){		/* if found, return */
-				blk->RRPV = (1 << M)-2;
+			if(blk->RRPV == (1 << RRPV_M)-1){		/* if found, return */
+				blk->RRPV = (1 << RRPV_M)-2;
 				return blk;
 			}
 		}
@@ -283,9 +283,23 @@ SRRIP_replacement(struct cache_set_t *set)
 }
 
 struct cache_blk_t *
-BRRIP_replacement(struct cache_set_t *set)
+BRRIP_replacement(struct cache_set_t *set, unsigned char BIPCTR)
 {
-	
+	struct cache_blk_t *blk;
+
+	while(1){
+		/* search for first block's RRPV = 2^M-1, here M = 3 */
+		for(blk=set->way_head; blk; blk=blk->way_next){
+			if(blk->RRPV == (1 << RRPV_M)-1){		/* if found, return */
+				if(BIPCTR == 0)
+					blk->RRPV -= 1;
+				return blk;
+			}
+		}
+		/* if not found, increase all blk's RRPV by 1 */
+		for(blk=set->way_head; blk; blk=blk->way_next)
+			blk->RRPV += 1;
+	}
 }
 
 /* create and initialize a general cache structure */
@@ -389,6 +403,17 @@ cache_create(char *name,		/* name of the cache */
 			if (!cp->sets[i].hash)
 				fatal("out of virtual memory");
 		}
+
+		/* for DRRIP replacement, HW test */
+		if (i % (cp->nsets/32) == 0)				/* SRRIP set */
+			cp->sets[i].dedicated_type = SRRIP_set;
+		else if ((i-1) % (cp->nsets/32) == 0)		/* BRRIP set */
+			cp->sets[i].dedicated_type = BRRIP_set;
+		else										/* follower set */
+			cp->sets[i].dedicated_type = follower_set;
+		cp->BIPCTR = 0;
+		cp->PSEL = 0;
+
 		/* NOTE: all the blocks in a set *must* be allocated contiguously,
 	 	otherwise, block accesses through SET->BLKS will fail (used
 	 	during random replacement selection) */
@@ -406,8 +431,9 @@ cache_create(char *name,		/* name of the cache */
 			blk->tag = 0;
 			blk->ready = 0;
 			blk->user_data = (usize != 0 ? (byte_t *)calloc(usize, sizeof(byte_t)) : NULL);
+
 			blk->nru_bit = 1;		/* HW test, 1 means victim */
-			blk->RRPV = (1 << M) - 1;		/* RRPV = 2^M - 1 */
+			blk->RRPV = (1 << RRPV_M) - 1;		/* RRPV = 2^M - 1 */
 
 			/* insert cache block into set hash table */
 			if (cp->hsize)
@@ -423,7 +449,7 @@ cache_create(char *name,		/* name of the cache */
 				cp->sets[i].way_tail = blk;
 		}
 	}
-	cp->PSEL = 0;
+	
 	return cp;
 }
 
@@ -562,9 +588,9 @@ cache_access(struct cache_t *cp,	/* cache to access */
 
 	/* check for a fast hit: access to same block */
 	if (CACHE_TAGSET(cp, addr) == cp->last_tagset){
-			/* hit in the same block */
-			blk = cp->last_blk;
-			goto cache_fast_hit;
+		/* hit in the same block */
+		blk = cp->last_blk;
+		goto cache_fast_hit;
 	}
 		
 	if (cp->hsize){
@@ -607,24 +633,40 @@ cache_access(struct cache_t *cp,	/* cache to access */
 			repl = first_nru_blk(&cp->sets[set]);
 			break;
 		case DRRIP:
-			if (set % (cp->nsets/32) == 0){					/* SRRIP set */
+			if (cp->sets[set].dedicated_type == SRRIP_set){			/* SRRIP set */
 				repl = SRRIP_replacement(&cp->sets[set]);
-				cp->PSEL += 1;
+				if(cp->PSEL < 31)								/* prevent overflow */
+					cp->PSEL++;
+				else
+					cp->PSEL = 31;
 			}
-			else if ((set-1) % (cp->nsets/32) == 0){		/* BRRIP set */
-				repl = BRRIP_replacement(&cp->sets[set]);
-				cp->PSEL -= 1;
+			else if (cp->sets[set].dedicated_type == BRRIP_set){	/* BRRIP set */
+				repl = BRRIP_replacement(&cp->sets[set], cp->BIPCTR);
+				if(cp->PSEL > -32)								/* prevent overflow */
+					cp->PSEL--;
+				else
+					cp->PSEL = -32;
+
+				if(cp->BIPCTR < 31)
+					cp->BIPCTR++;
+				else
+					cp->BIPCTR = 0;
 			}
-			else{											/* follower set */
+			else{												/* follower set */
 				if(cp->PSEL >= 0)
 					repl = SRRIP_replacement(&cp->sets[set]);
-				else
-					repl = BRRIP_replacement(&cp->sets[set]);
+				else{
+					repl = BRRIP_replacement(&cp->sets[set], cp->BIPCTR);
+					if(cp->BIPCTR < 31)
+						cp->BIPCTR++;
+					else
+						cp->BIPCTR = 0;
+				}
 			}
+
 			break;
 		default:
 			panic("bogus replacement policy");
-
 	}
 
 	/* remove this block from the hash bucket chain, if hash exists */
@@ -712,7 +754,7 @@ cache_hit: /* slow hit handler */
 	/* if NRU replacement, HW test */
 	if (cp->policy == NRU)
 		blk->nru_bit = 0;
-	else if (cp->policy == DRRIP && )
+	else if (cp->policy == DRRIP)
 		blk->RRPV = 0;
 
 

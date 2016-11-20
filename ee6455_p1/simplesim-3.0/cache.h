@@ -107,6 +107,12 @@ enum cache_policy {
 	DRRIP	   
 };
 
+enum drrip_set {
+	SRRIP_set,
+	BRRIP_set,
+	follower_set
+};
+
 /* block status values */
 #define CACHE_BLK_VALID		0x00000001	/* block in valid, in use */
 #define CACHE_BLK_DIRTY		0x00000002	/* dirty block */
@@ -135,7 +141,6 @@ struct cache_blk_t
 
 	unsigned char nru_bit; /* For NRU replacement */
 	unsigned char RRPV; /* For DRRIP replacement */
-	unsigned char BIRCTR; /* For DRRIP replacement */
 	
 };
 
@@ -149,6 +154,8 @@ struct cache_set_t
 	struct cache_blk_t *blks;	/* cache blocks, allocated sequentially, so
 				   this pointer can also be used for random
 				   access to cache blocks */
+
+	enum drrip_set dedicated_type;
 };
 
 /* cache definition */
@@ -218,6 +225,7 @@ struct cache_t
 	struct cache_set_t sets[1];	/* each entry is a set */
 
 	short PSEL; /* For DRRIP replacement */
+	unsigned char BIPCTR; /* For DRRIP replacement */
 };
 
 /* For NRU replacement policy, find first nru block. HW test */
@@ -229,7 +237,7 @@ struct cache_blk_t *
 SRRIP_replacement(struct cache_set_t *set);
 
 struct cache_blk_t *
-BRRIP_replacement(struct cache_set_t *set);
+BRRIP_replacement(struct cache_set_t *set, unsigned char BIPCTR);
 
 /* create and initialize a general cache structure */
 struct cache_t *			/* pointer to cache created */
