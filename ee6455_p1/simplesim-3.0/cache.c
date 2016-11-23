@@ -417,7 +417,7 @@ cache_create(char *name,		/* name of the cache */
 		if(cp->policy == DRRIP){
 			if (i % (cp->nsets/32) == 0)				// SRRIP set 
 				cp->sets[i].dedicated_type = SRRIP_set;
-			else if ((i-1) % (cp->nsets/32) == 0)		// BRRIP set 
+			else if ((i+1) % (cp->nsets/32) == 0)		// BRRIP set 
 				cp->sets[i].dedicated_type = BRRIP_set;
 			else										// follower set 
 				cp->sets[i].dedicated_type = follower_set;
@@ -655,7 +655,7 @@ cache_access(struct cache_t *cp,	/* cache to access */
 				else
 					cp->PSEL = -32;
 			}
-			else{												// follower set 
+			else{													// follower set 
 				if(cp->PSEL >= 0)
 					repl = SRRIP_replacement(&cp->sets[set]);
 				else
